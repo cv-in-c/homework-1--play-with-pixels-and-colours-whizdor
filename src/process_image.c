@@ -219,9 +219,10 @@ void scale_image(image im, int c, float v)
 
 float f(float a)
 {
-    float del = 6.0/29.0;
-    if(a > del * del * del) return pow(a,1/3.0);
-    return (a/(3*del*del) + 2*del/3.0);
+    float del = 6.0 / 29.0;
+    if (a * a * a > del)
+        return pow(a, 3.0);
+    return (a / (3 * del * del) + 2 * del / 3.0);
 }
 
 void rgb_to_hcl(image im)
@@ -251,26 +252,100 @@ void rgb_to_hcl(image im)
             // CIE-RGB Colour-Space to CIE-XYZ Conversion
             // http://www.brucelindbloom.com/index.html?Eqn_XYZ_to_Lab.html
 
-            float Xr,Yr,Zr;
+            float Xr, Yr, Zr;
 
             // Assuming Reference White Point values ar Tc = 2000K,
             Xr = 1.2743;
             Yr = 1;
             Zr = 0.1452;
 
-            float L,a,b;
+            float L, a, b;
 
-            L = 116 * f(Y/Yr) - 16;
-            a = 500 * (f(X/Xr) - f(Y/Yr));
-            b = 200 * (f(Y/Yr) - f(Z/Zr));
+            L = 116 * f(Y / Yr) - 16;
+            a = 500 * (f(X / Xr) - f(Y / Yr));
+            b = 200 * (f(Y / Yr) - f(Z / Zr));
 
-            //Finally, Conversion to HCL Colour Space.
+            // Finally, Conversion to HCL Colour Space.
 
-            float H = (b/a > 0) ? tanh(b/a) : tanh(b/a) + 2*3.14;
-            float C = sqrt(a*a + b*b);
+            float H = (b / a > 0) ? atan(b / a) : atan(b / a) + 2 * 3.14;
+            float C = sqrt(a * a + b * b);
 
             set_pixel(im, x, y, 0, H);
             set_pixel(im, x, y, 1, C);
             set_pixel(im, x, y, 2, L);
+        }
+}
+
+void hcl_to_rgb(image im)
+{
+    for (int x = 0; x < im.w; x++)
+        for (int y = 0; y < im.h; y++)
+        {
+            float H, C, L;
+            H = get_pixel(im, x, y, 0);
+            C = get_pixel(im, x, y, 1);
+            L = get_pixel(im, x, y, 2);
+
+            // Conversion of HCL to CIE-LAB Space.
+
+            float a = C * cos(H);
+            float b = C * sin(H);
+
+            // CIE-LAB to CIE-XYZ.
+
+            float Xr, Yr, Zr;
+
+            // Assuming Reference White Point values ar Tc = 2000K,
+            Xr = 1.2743;
+            Yr = 1;
+            Zr = 0.1452;
+
+            float X, Y, Z;
+
+            float del = 6.0 / 29.0;
+            float k = 116 / (3 * del * del);
+
+            float fx, fy, fz;
+            fy = (L + 16) / 116;
+            fx = a / 500 + fy;
+            fz = fy - b / 200;
+
+            if (L > k * del)
+                Y = pow((L + 16) / 116, 3.0);
+            else
+                Y = L / k;
+
+            if (fz * fz * fz > del)
+                Z = fz * fz * fz;
+            else
+                Y = (116 * fy - 16)/k;
+
+            if (fx * fx * fx > del)
+                X = fx * fx * fx;
+            else
+                X = (116 * fx - 16)/k;
+
+            X = X*Xr;
+            Y = Y*Yr;
+            Z = Z*Zr;
+
+            // CIE-XYZ Colour-Space to CIE-RGB Conversion
+            // Matrix inv(M) sourced from http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
+            // [R G B]' = inv(M) [X Y Z]' 
+
+            float r = 2.3706743 * X - 0.9000405 * Y - 0.4706338 * Z;
+            float g = -0.5138850 * X + 1.4253036 * Y + 0.0885814 * Z;
+            float b = 0.0052982 * X - 0.0146949 * Y + 1.0093968 * Z;
+
+            //Gamma Compression
+            float R,G,B;
+                
+            R = pow(r, 1/2.2);
+            G = pow(g, 1/2.2);
+            B = pow(b, 1/2.2);
+
+            set_pixel(im, x, y, 0, R);
+            set_pixel(im, x, y, 1, G);
+            set_pixel(im, x, y, 2, B);
         }
 }
